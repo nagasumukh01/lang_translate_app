@@ -11,7 +11,7 @@ class EdgeTTSProvider(BaseTTSProvider):
 
         # Check if the language is supported for Speech Synthesis.
         # We only synthesize voices for our supported list of languages:
-        if target_language not in ["en", "kn", "hi", "te", "ta", "ja"]:
+        if target_language not in ["en", "kn", "hi", "te", "ta", "ml", "mr", "gu", "bn", "ur", "ja", "es", "fr", "de", "ko", "ar", "zh"]:
             with open(output_path, "wb") as f:
                 f.write(b"")
             return output_path
@@ -24,7 +24,18 @@ class EdgeTTSProvider(BaseTTSProvider):
             "hi": "hi-IN-SwaraNeural",      # Hindi (India) female
             "te": "te-IN-ShrutiNeural",     # Telugu (India) female
             "ta": "ta-IN-PallaviNeural",    # Tamil (India) female
-            "ja": "ja-JP-NanamiNeural"      # Japanese (Japan) female
+            "ml": "ml-IN-SobhanaNeural",    # Malayalam (India) female
+            "mr": "mr-IN-AarohiNeural",     # Marathi (India) female
+            "gu": "gu-IN-DhwaniNeural",     # Gujarati (India) female
+            "bn": "bn-IN-TanishaaNeural",    # Bengali (India) female
+            "ur": "ur-IN-NeelamNeural",     # Urdu (India) female
+            "ja": "ja-JP-NanamiNeural",     # Japanese (Japan) female
+            "es": "es-ES-ElviraNeural",     # Spanish (Spain) female
+            "fr": "fr-FR-DeniseNeural",     # French (France) female
+            "de": "de-DE-KatjaNeural",      # German (Germany) female
+            "ko": "ko-KR-SunHiNeural",      # Korean (Korea) female
+            "ar": "ar-AE-FatimaNeural",     # Arabic (UAE) female
+            "zh": "zh-CN-XiaoxiaoNeural"    # Chinese (China) female
         }
         
         voice = voice_map.get(target_language, "en-US-AriaNeural")

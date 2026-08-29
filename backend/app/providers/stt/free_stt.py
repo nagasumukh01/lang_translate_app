@@ -15,7 +15,18 @@ class FreeSTTProvider:
             "hi": "hi-IN",  # Hindi (India)
             "te": "te-IN",  # Telugu (India)
             "ta": "ta-IN",  # Tamil (India)
-            "ja": "ja-JP"   # Japanese (Japan)
+            "ml": "ml-IN",  # Malayalam (India)
+            "mr": "mr-IN",  # Marathi (India)
+            "gu": "gu-IN",  # Gujarati (India)
+            "bn": "bn-IN",  # Bengali (India)
+            "ur": "ur-IN",  # Urdu (India)
+            "ja": "ja-JP",  # Japanese (Japan)
+            "es": "es-ES",  # Spanish (Spain)
+            "fr": "fr-FR",  # French (France)
+            "de": "de-DE",  # German (Germany)
+            "ko": "ko-KR",  # Korean (Korea)
+            "ar": "ar-AE",  # Arabic (UAE)
+            "zh": "zh-CN"   # Chinese (China)
         }
 
         if source_language not in lang_map:
