@@ -17,20 +17,12 @@ class FreeTranslationProvider(BaseTranslationProvider):
             return text
 
         try:
-            # Map language codes for Google Translate compatibility
-            # Konkani maps to 'gom' (Goan Konkani) in Google Translate
-            def map_code(c):
-                return "gom" if c == "kok" else c
-
-            sl_mapped = map_code(source_language)
-            tl_mapped = map_code(target_language)
-
-            logger.info(f"FreeTranslation: Translating '{text}' from {sl_mapped} to {tl_mapped} using Google Mobile API...")
+            logger.info(f"FreeTranslation: Translating '{text}' from {source_language} to {target_language} using Google Mobile API...")
             
             url = "https://translate.google.com/m"
             params = {
-                "sl": sl_mapped,
-                "tl": tl_mapped,
+                "sl": source_language,
+                "tl": target_language,
                 "q": text
             }
             query_string = urllib.parse.urlencode(params)

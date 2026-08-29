@@ -14,13 +14,12 @@ class FreeSTTProvider:
             "kn": "kn-IN",  # Kannada (India)
             "hi": "hi-IN",  # Hindi (India)
             "te": "te-IN",  # Telugu (India)
-            "ta": "ta-IN"   # Tamil (India)
+            "ta": "ta-IN",  # Tamil (India)
+            "ja": "ja-JP"   # Japanese (Japan)
         }
 
         if source_language not in lang_map:
-            name_map = {"kok": "Konkani", "tcy": "Tulu"}
-            lang_name = name_map.get(source_language, source_language.upper())
-            raise Exception(f"Speech recognition is not supported for {lang_name} yet. Please speak in English, Kannada, Hindi, Telugu, or Tamil.")
+            raise Exception(f"Speech recognition is not supported for language code '{source_language}' yet. Please speak in one of our supported languages.")
 
         language_locale = lang_map[source_language]
 

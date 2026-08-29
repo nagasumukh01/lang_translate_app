@@ -72,15 +72,9 @@ const List<AppLanguage> supportedLanguages = [
     flag: '🇮🇳',
   ),
   AppLanguage(
-    code: 'kok',
-    name: 'Konkani',
-    nativeName: 'ಕೊಂಕಣಿ',
-    flag: '🇮🇳',
-  ),
-  AppLanguage(
-    code: 'tcy',
-    name: 'Tulu',
-    nativeName: 'ತುಳು',
-    flag: '🇮🇳',
+    code: 'ja',
+    name: 'Japanese',
+    nativeName: '日本語',
+    flag: '🇯🇵',
   ),
 ];
