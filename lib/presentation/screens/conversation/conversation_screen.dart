@@ -561,7 +561,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             const SizedBox(height: 10),
           ],
 
-          // Record Floating button with pulse ring
+          // Record button with pulse ring
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -579,25 +579,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                         color: theme.colorScheme.secondary,
                       ),
                     ),
-                  GestureDetector(
-                    onTap: () {
-                      if (!isProcessing && !isRecording) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            content: const Text('Press and HOLD to record, release to translate.'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      }
-                    },
-                    onLongPressStart: (details) {
+                  Listener(
+                    onPointerDown: (_) {
                       if (!isProcessing) {
                         ref.read(translationNotifierProvider.notifier).startRecording();
                       }
                     },
-                    onLongPressEnd: (details) {
+                    onPointerUp: (_) {
+                      ref.read(translationNotifierProvider.notifier).stopAndTranslate();
+                    },
+                    onPointerCancel: (_) {
                       ref.read(translationNotifierProvider.notifier).stopAndTranslate();
                     },
                     child: Container(
