@@ -13,9 +13,16 @@ class FreeSTTProvider:
             "en": "en-IN",  # English (India)
             "kn": "kn-IN",  # Kannada (India)
             "hi": "hi-IN",  # Hindi (India)
-            "te": "te-IN"   # Telugu (India)
+            "te": "te-IN",  # Telugu (India)
+            "ta": "ta-IN"   # Tamil (India)
         }
-        language_locale = lang_map.get(source_language, "en-IN")
+
+        if source_language not in lang_map:
+            name_map = {"kok": "Konkani", "tcy": "Tulu"}
+            lang_name = name_map.get(source_language, source_language.upper())
+            raise Exception(f"Speech recognition is not supported for {lang_name} yet. Please speak in English, Kannada, Hindi, Telugu, or Tamil.")
+
+        language_locale = lang_map[source_language]
 
         # Check if the file is a standard WAV file (starts with RIFF)
         is_wav = False

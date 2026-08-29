@@ -65,4 +65,22 @@ const List<AppLanguage> supportedLanguages = [
     nativeName: 'తెలుగు',
     flag: '🇮🇳',
   ),
+  AppLanguage(
+    code: 'ta',
+    name: 'Tamil',
+    nativeName: 'தமிழ்',
+    flag: '🇮🇳',
+  ),
+  AppLanguage(
+    code: 'kok',
+    name: 'Konkani',
+    nativeName: 'ಕೊಂಕಣಿ',
+    flag: '🇮🇳',
+  ),
+  AppLanguage(
+    code: 'tcy',
+    name: 'Tulu',
+    nativeName: 'ತುಳು',
+    flag: '🇮🇳',
+  ),
 ];

@@ -9,13 +9,21 @@ class EdgeTTSProvider(BaseTTSProvider):
                 f.write(b"")
             return output_path
 
+        # Check if the language is supported for Speech Synthesis.
+        # Konkani (kok) and Tulu (tcy) do not have MS Edge TTS voices, so we write empty bytes.
+        if target_language not in ["en", "kn", "hi", "te", "ta"]:
+            with open(output_path, "wb") as f:
+                f.write(b"")
+            return output_path
+
         # Map language codes to natural sounding MS Edge voices
         # We prefer high-quality neural voices
         voice_map = {
             "en": "en-US-AriaNeural",       # English (US) female
             "kn": "kn-IN-SapnaNeural",      # Kannada (India) female
             "hi": "hi-IN-SwaraNeural",      # Hindi (India) female
-            "te": "te-IN-ShrutiNeural"      # Telugu (India) female
+            "te": "te-IN-ShrutiNeural",     # Telugu (India) female
+            "ta": "ta-IN-PallaviNeural"     # Tamil (India) female
         }
         
         voice = voice_map.get(target_language, "en-US-AriaNeural")
