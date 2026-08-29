@@ -17,10 +17,13 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
   final Ref _ref;
   String? _recordedPath;
   Timer? _stateTimer;
+  bool _isRecording = false;
+  bool _pendingStop = false;
 
   TranslationNotifier(this._api, this._audio, this._ref) : super(const TranslationInitial());
 
   Future<void> startRecording() async {
+    _pendingStop = false;
     state = const TranslationInitial();
     final hasPermission = await _audio.requestMicrophonePermission();
     if (!hasPermission) {
@@ -31,14 +34,28 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
     final path = await _audio.startRecording();
     if (path != null) {
       _recordedPath = path;
+      _isRecording = true;
       state = const TranslationRecording();
+
+      // If user already released the button while we were starting up
+      if (_pendingStop) {
+        _pendingStop = false;
+        await stopAndTranslate();
+      }
     } else {
       state = const TranslationError('Could not start recording. Please try again.');
     }
   }
 
   Future<void> stopAndTranslate() async {
-    if (state is! TranslationRecording) return;
+    // If recording hasn't started yet, mark pending stop
+    if (!_isRecording) {
+      _pendingStop = true;
+      return;
+    }
+
+    _isRecording = false;
+    _pendingStop = false;
 
     final path = await _audio.stopRecording();
     if (path == null) {
@@ -144,6 +161,8 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
 
   void reset() {
     _stateTimer?.cancel();
+    _isRecording = false;
+    _pendingStop = false;
     state = const TranslationInitial();
   }
 

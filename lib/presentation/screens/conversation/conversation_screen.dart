@@ -580,6 +580,18 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                       ),
                     ),
                   GestureDetector(
+                    onTap: () {
+                      if (!isProcessing && !isRecording) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            content: const Text('Press and HOLD to record, release to translate.'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      }
+                    },
                     onLongPressStart: (details) {
                       if (!isProcessing) {
                         ref.read(translationNotifierProvider.notifier).startRecording();
@@ -588,28 +600,28 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     onLongPressEnd: (details) {
                       ref.read(translationNotifierProvider.notifier).stopAndTranslate();
                     },
-                    child: FloatingActionButton.large(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            content: const Text('Hold button to speak, release to translate.'),
-                            duration: const Duration(seconds: 1),
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isRecording 
+                            ? Colors.red 
+                            : (isProcessing ? theme.colorScheme.surfaceVariant : theme.colorScheme.primary),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isRecording ? Colors.red : theme.colorScheme.primary).withOpacity(0.3),
+                            blurRadius: isRecording ? 16 : 8,
+                            offset: const Offset(0, 4),
                           ),
-                        );
-                      },
-                      backgroundColor: isRecording 
-                          ? Colors.red 
-                          : (isProcessing ? theme.colorScheme.surfaceVariant : theme.colorScheme.primary),
-                      foregroundColor: isRecording 
-                          ? Colors.white 
-                          : (isProcessing ? theme.colorScheme.onSurfaceVariant.withOpacity(0.5) : Colors.white),
-                      shape: const CircleBorder(),
-                      elevation: isRecording ? 8 : 4,
+                        ],
+                      ),
                       child: Icon(
                         isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
-                        size: 38,
+                        size: 36,
+                        color: isRecording 
+                            ? Colors.white 
+                            : (isProcessing ? theme.colorScheme.onSurfaceVariant.withOpacity(0.5) : Colors.white),
                       ),
                     ),
                   ),
