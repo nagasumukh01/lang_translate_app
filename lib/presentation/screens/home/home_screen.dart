@@ -272,56 +272,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const Spacer(flex: 2),
 
                 // Start button with beautiful gradient background
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: isValid
-                        ? LinearGradient(
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.secondary,
-                            ],
-                          )
-                        : null,
-                    boxShadow: isValid
-                        ? [
-                            BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.3),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: isValid
+                          ? LinearGradient(
+                              colors: [
+                                theme.colorScheme.primary,
+                                theme.colorScheme.secondary,
+                              ],
                             )
-                          ]
-                        : null,
-                  ),
-                  child: ElevatedButton(
-                    onPressed: isValid
-                        ? () {
-                            context.push('/conversation');
-                          }
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                          : null,
+                      color: isValid ? null : theme.colorScheme.onSurface.withOpacity(0.12),
+                      boxShadow: isValid
+                          ? [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withOpacity(0.3),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              )
+                            ]
+                          : null,
                     ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.mic_none_rounded, size: 24),
-                        SizedBox(width: 12),
-                        Text(
-                          'Start Translate',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
+                    child: InkWell(
+                      onTap: isValid
+                          ? () {
+                              context.push('/conversation');
+                            }
+                          : null,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.mic_none_rounded,
+                              size: 24,
+                              color: isValid ? Colors.white : theme.colorScheme.onSurface.withOpacity(0.38),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Start Translate',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                                color: isValid ? Colors.white : theme.colorScheme.onSurface.withOpacity(0.38),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
