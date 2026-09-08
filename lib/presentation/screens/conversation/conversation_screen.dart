@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/languages.dart';
-import '../../providers/api_provider.dart';
 import '../../providers/conversation_provider.dart';
 import '../../providers/translation_notifier.dart';
 import '../../providers/translation_state.dart';
@@ -16,14 +15,12 @@ class ConversationScreen extends ConsumerStatefulWidget {
 
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final ScrollController _scrollController = ScrollController();
-  final TextEditingController _ipController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
-      _ipController.text = ref.read(apiBaseUrlProvider);
     });
   }
 
@@ -37,73 +34,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }
   }
 
-  void _showSettingsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.dns_rounded),
-              SizedBox(width: 12),
-              Text('Server Configuration'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Enter the backend base URL (e.g. your Cloudflare Tunnel address or PC local IP).',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _ipController,
-                decoration: const InputDecoration(
-                  labelText: 'Server URL',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                  ),
-                  hintText: 'https://structures-common-arrow-plasma.trycloudflare.com',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                String input = _ipController.text.trim();
-                if (input.isNotEmpty && !input.startsWith("http://") && !input.startsWith("https://")) {
-                  input = "http://$input";
-                }
-                ref.read(apiBaseUrlProvider.notifier).state = input;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    content: Text('Server updated to: $input'),
-                  ),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   void dispose() {
     _scrollController.dispose();
-    _ipController.dispose();
     super.dispose();
   }
 
@@ -149,18 +82,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _showSettingsDialog,
-            tooltip: 'Server Settings',
-          ),
-          IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             onPressed: () {
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Clear History'),
-                  content: const Text('Are you sure you want to clear this conversation history?'),
+                  content: const Text('Clear all conversation history?'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -206,7 +134,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            'No translation history yet.',
+                            'No translations yet',
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.bold,
@@ -214,7 +142,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Press and hold the microphone at the bottom to translate your voice.',
+                            'Tap the microphone to start speaking.\nYour voice will be translated instantly.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
@@ -235,7 +163,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   ),
           ),
 
-          // Control and recording panel
+          // Control panel
           _buildControlPanel(theme, translationState, activeSpeaker),
         ],
       ),
@@ -245,12 +173,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Widget _buildMessageBubble(BuildContext context, ThemeData theme, ConversationMessage message) {
     final isYou = message.speaker == 'You';
     final Alignment bubbleAlignment = isYou ? Alignment.centerRight : Alignment.centerLeft;
-
     final formattedTime = '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}';
-
     final isDark = theme.brightness == Brightness.dark;
 
-    // Use nice gradient for user speech bubble, and surface card for receiver
     final decoration = BoxDecoration(
       gradient: isYou
           ? LinearGradient(
@@ -281,7 +206,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final textColor = isYou ? Colors.white : theme.colorScheme.onSurface;
     final subtitleColor = isYou ? Colors.white.withOpacity(0.6) : theme.colorScheme.onSurfaceVariant.withOpacity(0.7);
 
-    // Find flags
     final sourceFlag = supportedLanguages.firstWhere((l) => l.code == message.sourceLanguage, orElse: () => supportedLanguages.first).flag;
     final targetFlag = supportedLanguages.firstWhere((l) => l.code == message.targetLanguage, orElse: () => supportedLanguages.first).flag;
 
@@ -298,7 +222,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Speaker Name & Flag
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -311,82 +234,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 ),
                 Text(
                   formattedTime,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: subtitleColor,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-
-            // Original Speech text
             Text(
               message.sourceText,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: textColor.withOpacity(0.95),
-              ),
+              style: theme.textTheme.bodyMedium?.copyWith(color: textColor.withOpacity(0.95)),
             ),
             const SizedBox(height: 2),
             Text(
               '${message.sourceLanguage.toUpperCase()} $sourceFlag',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: subtitleColor,
-                fontWeight: FontWeight.bold,
-              ),
+              style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
             ),
-
-            // Soft Divider
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Divider(
-                height: 1,
-                color: textColor.withOpacity(0.12),
-              ),
+              child: Divider(height: 1, color: textColor.withOpacity(0.12)),
             ),
-
-            // Translated text + volume trigger
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        message.translatedText,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${message.targetLanguage.toUpperCase()} $targetFlag',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: subtitleColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (message.audioPath != null && message.audioPath!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: textColor.withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: Icon(Icons.volume_up_rounded, size: 20, color: textColor),
-                        onPressed: () => ref.read(translationNotifierProvider.notifier).replayAudio(message.audioPath!),
-                        tooltip: 'Speak translation',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ),
-              ],
+            Text(
+              message.translatedText,
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: textColor),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${message.targetLanguage.toUpperCase()} $targetFlag',
+              style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -395,47 +268,33 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   Widget _buildControlPanel(ThemeData theme, TranslationState state, Speaker activeSpeaker) {
-    String statusText = 'Hold and speak';
-    bool showSpinner = false;
+    String statusText = 'Tap mic to speak';
     bool isRecording = false;
     bool isProcessing = false;
+    String? liveText;
 
     switch (state) {
       case TranslationInitial():
-        statusText = 'Hold mic to speak';
+        statusText = 'Tap mic to speak';
         break;
       case TranslationRecording():
         statusText = 'Listening...';
         isRecording = true;
-        break;
-      case TranslationUploading():
-        statusText = 'Uploading voice...';
-        showSpinner = true;
-        isProcessing = true;
-        break;
-      case TranslationTranscribing():
-        statusText = 'Converting voice...';
-        showSpinner = true;
-        isProcessing = true;
+        liveText = state.liveText;
         break;
       case TranslationTranslating():
         statusText = 'Translating...';
-        showSpinner = true;
-        isProcessing = true;
-        break;
-      case TranslationGeneratingSpeech():
-        statusText = 'Generating audio...';
-        showSpinner = true;
         isProcessing = true;
         break;
       case TranslationPlayingAudio():
         statusText = 'Speaking translation...';
+        isProcessing = true;
         break;
       case TranslationSuccess():
-        statusText = 'Translated!';
+        statusText = 'Done! Tap mic for next';
         break;
       case TranslationError():
-        statusText = 'Translation error';
+        statusText = 'Error occurred';
         break;
     }
 
@@ -496,23 +355,38 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
 
-          // Waveform Equalizer when active
+          // Live recognized text
+          if (isRecording && liveText != null && liveText.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '"$liveText"',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+
+          // Waveform when recording
           if (isRecording)
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: _VoiceWaveform(color: Colors.red),
             )
-          else if (state is TranslationPlayingAudio)
-             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _VoiceWaveform(color: theme.colorScheme.secondary),
-            )
           else
             const SizedBox(height: 2),
 
-          // Status & spinner indicator
+          // Error display
           if (state is TranslationError)
             Container(
               margin: const EdgeInsets.only(bottom: 14),
@@ -522,27 +396,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     state.message,
-                    style: TextStyle(
-                      color: theme.colorScheme.onErrorContainer, 
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer, fontSize: 13, fontWeight: FontWeight.w500),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () => ref.read(translationNotifierProvider.notifier).reset(),
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Reset', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
+                  TextButton.icon(
+                    onPressed: () => ref.read(translationNotifierProvider.notifier).reset(),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Reset', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),
@@ -551,9 +415,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             Text(
               statusText.toUpperCase(),
               style: theme.textTheme.labelMedium?.copyWith(
-                color: isRecording 
-                    ? Colors.red 
-                    : (isProcessing ? theme.colorScheme.secondary : theme.colorScheme.primary),
+                color: isRecording ? Colors.red : (isProcessing ? theme.colorScheme.secondary : theme.colorScheme.primary),
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.0,
               ),
@@ -561,7 +423,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             const SizedBox(height: 10),
           ],
 
-          // Record button with pulse ring
+          // Mic button — tap to start/stop
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -570,7 +432,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 children: [
                   if (isRecording)
                     const _AnimatedPulseRing(color: Colors.red),
-                  if (showSpinner)
+                  if (isProcessing)
                     SizedBox(
                       width: 84,
                       height: 84,
@@ -579,25 +441,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                         color: theme.colorScheme.secondary,
                       ),
                     ),
-                  Listener(
-                    onPointerDown: (_) {
-                      if (!isProcessing) {
-                        ref.read(translationNotifierProvider.notifier).startRecording();
+                  GestureDetector(
+                    onTap: () {
+                      if (isProcessing) return;
+                      if (isRecording) {
+                        ref.read(translationNotifierProvider.notifier).stopListening();
+                      } else {
+                        ref.read(translationNotifierProvider.notifier).startListening();
                       }
-                    },
-                    onPointerUp: (_) {
-                      ref.read(translationNotifierProvider.notifier).stopAndTranslate();
-                    },
-                    onPointerCancel: (_) {
-                      ref.read(translationNotifierProvider.notifier).stopAndTranslate();
                     },
                     child: Container(
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isRecording 
-                            ? Colors.red 
+                        color: isRecording
+                            ? Colors.red
                             : (isProcessing ? theme.colorScheme.surfaceVariant : theme.colorScheme.primary),
                         boxShadow: [
                           BoxShadow(
@@ -608,10 +467,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                         ],
                       ),
                       child: Icon(
-                        isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
+                        isRecording ? Icons.stop_rounded : Icons.mic_rounded,
                         size: 36,
-                        color: isRecording 
-                            ? Colors.white 
+                        color: isRecording
+                            ? Colors.white
                             : (isProcessing ? theme.colorScheme.onSurfaceVariant.withOpacity(0.5) : Colors.white),
                       ),
                     ),
@@ -621,9 +480,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          if (!isRecording && !showSpinner && state is! TranslationError)
+          if (!isRecording && !isProcessing && state is! TranslationError)
             Text(
-              'Hold button to talk',
+              'Tap to speak, tap again to stop',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
               ),
@@ -690,18 +549,16 @@ class _VoiceWaveformState extends State<_VoiceWaveform> with SingleTickerProvide
   }
 }
 
-// Glowing rings indicator
+// Glowing pulse ring
 class _AnimatedPulseRing extends StatefulWidget {
   final Color color;
-
   const _AnimatedPulseRing({required this.color});
 
   @override
   State<_AnimatedPulseRing> createState() => _AnimatedPulseRingState();
 }
 
-class _AnimatedPulseRingState extends State<_AnimatedPulseRing>
-    with SingleTickerProviderStateMixin {
+class _AnimatedPulseRingState extends State<_AnimatedPulseRing> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override

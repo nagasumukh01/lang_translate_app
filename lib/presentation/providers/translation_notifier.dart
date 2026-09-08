@@ -1,96 +1,114 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_provider.dart';
-import '../../core/utils/audio_helper.dart';
 import 'conversation_provider.dart';
 import 'translation_state.dart';
 
-final audioHelperProvider = Provider<AudioHelper>((ref) {
-  final helper = AudioHelper();
-  ref.onDispose(() => helper.dispose());
-  return helper;
-});
-
 class TranslationNotifier extends StateNotifier<TranslationState> {
-  final ApiService _api;
-  final AudioHelper _audio;
   final Ref _ref;
-  String? _recordedPath;
-  Timer? _stateTimer;
-  bool _isRecording = false;
-  bool _pendingStop = false;
+  String _recognizedText = '';
+  bool _isFinalResult = false;
 
-  TranslationNotifier(this._api, this._audio, this._ref) : super(const TranslationInitial());
+  TranslationNotifier(this._ref) : super(const TranslationInitial());
 
-  Future<void> startRecording() async {
-    _pendingStop = false;
-    state = const TranslationInitial();
-    final hasPermission = await _audio.requestMicrophonePermission();
-    if (!hasPermission) {
-      state = const TranslationError('Microphone permission is required to translate your speech.');
-      return;
-    }
+  /// Start listening for speech
+  Future<void> startListening() async {
+    final service = _ref.read(translationServiceProvider);
+    final direction = _ref.read(activeDirectionProvider);
 
-    final path = await _audio.startRecording();
-    if (path != null) {
-      _recordedPath = path;
-      _isRecording = true;
-      state = const TranslationRecording();
+    _recognizedText = '';
+    _isFinalResult = false;
+    state = const TranslationRecording();
 
-      // If user already released the button while we were starting up
-      if (_pendingStop) {
-        _pendingStop = false;
-        await stopAndTranslate();
-      }
-    } else {
-      state = const TranslationError('Could not start recording. Please try again.');
+    try {
+      await service.initStt();
+      await service.initTts();
+
+      await service.startListening(
+        languageCode: direction.source.code,
+        onResult: (text, isFinal) {
+          _recognizedText = text;
+          _isFinalResult = isFinal;
+
+          // Update state to show live recognized text
+          state = TranslationRecording(liveText: text);
+
+          // If final result, automatically proceed to translation
+          if (isFinal && text.trim().isNotEmpty) {
+            _processTranslation();
+          }
+        },
+        onError: (error) {
+          state = TranslationError('Speech recognition error: $error');
+        },
+      );
+    } catch (e) {
+      state = TranslationError('Could not start listening: ${e.toString()}');
     }
   }
 
-  Future<void> stopAndTranslate() async {
-    // If recording hasn't started yet, mark pending stop
-    if (!_isRecording) {
-      _pendingStop = true;
+  /// Stop listening and process whatever we have
+  Future<void> stopListening() async {
+    final service = _ref.read(translationServiceProvider);
+    await service.stopListening();
+
+    // If we already got a final result, translation is already processing
+    if (_isFinalResult) return;
+
+    // If we have partial text, process it
+    if (_recognizedText.trim().isNotEmpty) {
+      await _processTranslation();
+    } else {
+      state = const TranslationError('No speech detected. Please try again.');
+    }
+  }
+
+  /// Core pipeline: translate recognized text → speak translation
+  Future<void> _processTranslation() async {
+    final service = _ref.read(translationServiceProvider);
+    final direction = _ref.read(activeDirectionProvider);
+    final sourceText = _recognizedText.trim();
+
+    if (sourceText.isEmpty) {
+      state = const TranslationError('No speech detected. Please try again.');
       return;
     }
-
-    _isRecording = false;
-    _pendingStop = false;
-
-    final path = await _audio.stopRecording();
-    if (path == null) {
-      state = const TranslationError('Could not save recording. Please try again.');
-      return;
-    }
-    _recordedPath = path;
-
-    // A tiny delay to ensure file write completes
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    // Start pipeline
-    state = const TranslationUploading();
-    _startProcessingAnimations();
 
     try {
-      final direction = _ref.read(activeDirectionProvider);
-
-      final response = await _api.translateVoice(
-        audioPath: _recordedPath!,
-        sourceLang: direction.source.code,
-        targetLang: direction.target.code,
+      // Step 1: Translate
+      state = const TranslationTranslating();
+      final translatedText = await service.translate(
+        text: sourceText,
+        sourceLanguage: direction.source.code,
+        targetLanguage: direction.target.code,
       );
 
-      _stateTimer?.cancel();
-
-      // Play audio automatically
-      state = const TranslationPlayingAudio();
-      try {
-        await _audio.playAudio(response.localAudioPath);
-      } catch (e) {
-        // Fallback if playback fails, keep going
+      if (translatedText.isEmpty) {
+        state = const TranslationError('Translation returned empty. Please try again.');
+        return;
       }
 
-      // Add to conversation history
+      // Step 2: Speak the translation
+      state = const TranslationPlayingAudio();
+
+      // Set completion handler before speaking
+      final completer = Completer<void>();
+      service.setTtsCompletionHandler(() {
+        if (!completer.isCompleted) completer.complete();
+      });
+
+      await service.speak(
+        text: translatedText,
+        languageCode: direction.target.code,
+      );
+
+      // Wait for TTS to finish (with timeout)
+      await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {},
+      );
+
+      // Step 3: Save to conversation history
       final currentSpeaker = _ref.read(activeSpeakerProvider);
       final speakerName = currentSpeaker == Speaker.you ? 'You' : 'Receiver';
 
@@ -98,50 +116,24 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
             speakerName: speakerName,
             sourceLanguage: direction.source.code,
             targetLanguage: direction.target.code,
-            sourceText: response.sourceText,
-            translatedText: response.translatedText,
-            audioPath: response.localAudioPath,
+            sourceText: sourceText,
+            translatedText: translatedText,
           );
 
       state = TranslationSuccess(
-        sourceText: response.sourceText,
-        translatedText: response.translatedText,
-        audioPath: response.localAudioPath,
+        sourceText: sourceText,
+        translatedText: translatedText,
       );
 
-      // Centrally swap the active speaker for the next turn
+      // Auto-swap speaker for next turn
       _swapActiveSpeaker();
-
     } catch (e) {
-      _stateTimer?.cancel();
       String errorMsg = e.toString().replaceAll('Exception: ', '');
-      if (errorMsg.contains('SocketException') || errorMsg.contains('TimeoutException')) {
-        errorMsg = 'Backend server is unavailable. Please check connection and try again.';
+      if (errorMsg.contains('TimeoutException')) {
+        errorMsg = 'Translation timed out. Check your internet connection.';
       }
       state = TranslationError(errorMsg);
     }
-  }
-
-  void _startProcessingAnimations() {
-    _stateTimer?.cancel();
-    int stage = 0;
-
-    _stateTimer = Timer.periodic(const Duration(milliseconds: 1200), (timer) {
-      if (state is TranslationSuccess || state is TranslationError) {
-        timer.cancel();
-        return;
-      }
-
-      stage++;
-      if (stage == 1) {
-        state = const TranslationTranscribing();
-      } else if (stage == 2) {
-        state = const TranslationTranslating();
-      } else if (stage >= 3) {
-        state = const TranslationGeneratingSpeech();
-        timer.cancel();
-      }
-    });
   }
 
   void _swapActiveSpeaker() {
@@ -150,31 +142,15 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
         current == Speaker.you ? Speaker.receiver : Speaker.you;
   }
 
-  Future<void> replayAudio(String? path) async {
-    if (path == null) return;
-    try {
-      await _audio.playAudio(path);
-    } catch (e) {
-      // Handle playback error
-    }
-  }
-
   void reset() {
-    _stateTimer?.cancel();
-    _isRecording = false;
-    _pendingStop = false;
+    final service = _ref.read(translationServiceProvider);
+    service.stopListening();
+    service.stopSpeaking();
+    _recognizedText = '';
     state = const TranslationInitial();
-  }
-
-  @override
-  void dispose() {
-    _stateTimer?.cancel();
-    super.dispose();
   }
 }
 
 final translationNotifierProvider = StateNotifierProvider<TranslationNotifier, TranslationState>((ref) {
-  final api = ref.watch(apiServiceProvider);
-  final audio = ref.watch(audioHelperProvider);
-  return TranslationNotifier(api, audio, ref);
+  return TranslationNotifier(ref);
 });

@@ -10,23 +10,12 @@ class TranslationInitial extends TranslationState {
 }
 
 class TranslationRecording extends TranslationState {
-  const TranslationRecording();
-}
-
-class TranslationUploading extends TranslationState {
-  const TranslationUploading();
-}
-
-class TranslationTranscribing extends TranslationState {
-  const TranslationTranscribing();
+  final String? liveText;
+  const TranslationRecording({this.liveText});
 }
 
 class TranslationTranslating extends TranslationState {
   const TranslationTranslating();
-}
-
-class TranslationGeneratingSpeech extends TranslationState {
-  const TranslationGeneratingSpeech();
 }
 
 class TranslationPlayingAudio extends TranslationState {
@@ -36,12 +25,10 @@ class TranslationPlayingAudio extends TranslationState {
 class TranslationSuccess extends TranslationState {
   final String sourceText;
   final String translatedText;
-  final String? audioPath;
 
   const TranslationSuccess({
     required this.sourceText,
     required this.translatedText,
-    this.audioPath,
   });
 }
 
