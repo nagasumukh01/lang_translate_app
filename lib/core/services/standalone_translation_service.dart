@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
@@ -9,8 +10,10 @@ import 'package:speech_to_text/speech_to_text.dart';
 class StandaloneTranslationService {
   final SpeechToText _stt = SpeechToText();
   final FlutterTts _tts = FlutterTts();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _sttInitialized = false;
   bool _sttAvailable = false;
+  Function()? _ttsCompletionCallback;
 
   // STT locale mapping
   static const Map<String, String> sttLocales = {
@@ -25,7 +28,7 @@ class StandaloneTranslationService {
     'bn': 'bn_IN',
     'ur': 'ur_PK',
     'ja': 'ja_JP',
-    'es': 'es_ES',
+    'es': 'es-ES',
     'fr': 'fr_FR',
     'de': 'de_DE',
     'ko': 'ko_KR',
@@ -84,10 +87,16 @@ class StandaloneTranslationService {
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
-    // Ensure TTS engine is ready on Android
     if (!kIsWeb) {
       await _tts.awaitSpeakCompletion(true);
     }
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      _ttsCompletionCallback?.call();
+    });
+    _tts.setCompletionHandler(() {
+      _ttsCompletionCallback?.call();
+    });
   }
 
   /// Start listening for speech input.
@@ -222,32 +231,70 @@ class StandaloneTranslationService {
     throw lastError ?? Exception('Translation failed. Please try again.');
   }
 
-  /// Speak translated text using device TTS
+  /// Speak text: uses high-quality Google TTS audio stream (supports ALL languages
+  /// without requiring on-device voice data to be downloaded), with fallback to flutter_tts.
   Future<void> speak({
     required String text,
     required String languageCode,
   }) async {
     if (text.trim().isEmpty) return;
 
-    final ttsLang = ttsLanguages[languageCode] ?? 'en-US';
-    await _tts.setLanguage(ttsLang);
-    debugPrint('TTS speaking in $ttsLang: "$text"');
-    await _tts.speak(text);
+    await stopSpeaking();
+
+    // 1. Try online Google TTS audio stream (works universally for any language including Japanese, Kannada, etc.)
+    try {
+      final googleLang = languageCode.split('-').first.toLowerCase();
+      final encoded = Uri.encodeComponent(text.trim());
+      final url = Uri.parse(
+        'https://translate.google.com/translate_tts?ie=UTF-8&tl=$googleLang&client=tw-ob&q=$encoded',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        debugPrint('Playing online Google TTS audio for $googleLang (${response.bodyBytes.length} bytes)');
+        await _audioPlayer.play(BytesSource(response.bodyBytes));
+        return;
+      }
+    } catch (e) {
+      debugPrint('Online Google TTS error ($e), falling back to device TTS');
+    }
+
+    // 2. Fallback: On-device flutter_tts
+    try {
+      final ttsLang = ttsLanguages[languageCode] ?? 'en-US';
+      await _tts.setLanguage(ttsLang);
+      debugPrint('Device TTS speaking in $ttsLang: "$text"');
+      await _tts.speak(text);
+    } catch (e) {
+      debugPrint('Device TTS speak error: $e');
+    }
   }
 
   /// Stop speaking
   Future<void> stopSpeaking() async {
-    await _tts.stop();
+    try {
+      await _audioPlayer.stop();
+    } catch (_) {}
+    try {
+      await _tts.stop();
+    } catch (_) {}
   }
 
-  /// Set a completion handler for when TTS finishes speaking
+  /// Set a completion handler for when speech finishes
   void setTtsCompletionHandler(Function() onComplete) {
-    _tts.setCompletionHandler(onComplete);
+    _ttsCompletionCallback = onComplete;
   }
 
   /// Dispose resources
   void dispose() {
     _stt.stop();
     _tts.stop();
+    _audioPlayer.dispose();
   }
 }
