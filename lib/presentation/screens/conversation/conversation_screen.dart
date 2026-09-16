@@ -239,27 +239,85 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              message.sourceText,
-              style: theme.textTheme.bodyMedium?.copyWith(color: textColor.withOpacity(0.95)),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${message.sourceLanguage.toUpperCase()} $sourceFlag',
-              style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.sourceText,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: textColor.withOpacity(0.95)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${message.sourceLanguage.toUpperCase()} $sourceFlag',
+                        style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    ref.read(translationNotifierProvider.notifier).replaySpeech(
+                          message.sourceText,
+                          message.sourceLanguage,
+                        );
+                  },
+                  icon: Icon(
+                    Icons.volume_up_outlined,
+                    color: textColor.withOpacity(0.7),
+                    size: 20,
+                  ),
+                  tooltip: 'Play original speech',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+              ],
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: Divider(height: 1, color: textColor.withOpacity(0.12)),
             ),
-            Text(
-              message.translatedText,
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: textColor),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${message.targetLanguage.toUpperCase()} $targetFlag',
-              style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.translatedText,
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: textColor),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${message.targetLanguage.toUpperCase()} $targetFlag',
+                        style: theme.textTheme.labelSmall?.copyWith(color: subtitleColor, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    ref.read(translationNotifierProvider.notifier).replaySpeech(
+                          message.translatedText,
+                          message.targetLanguage,
+                        );
+                  },
+                  icon: Icon(
+                    Icons.volume_up_rounded,
+                    color: textColor,
+                    size: 24,
+                  ),
+                  tooltip: 'Replay translated speech',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                ),
+              ],
             ),
           ],
         ),

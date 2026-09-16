@@ -185,6 +185,20 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
         current == Speaker.you ? Speaker.receiver : Speaker.you;
   }
 
+  Future<void> replaySpeech(String text, String languageCode) async {
+    final service = _ref.read(translationServiceProvider);
+    try {
+      await service.stopSpeaking();
+      await service.initTts();
+      await service.speak(
+        text: text,
+        languageCode: languageCode,
+      );
+    } catch (e) {
+      debugPrint('Replay error: $e');
+    }
+  }
+
   void reset() {
     final service = _ref.read(translationServiceProvider);
     service.stopListening();
