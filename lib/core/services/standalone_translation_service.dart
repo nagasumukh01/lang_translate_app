@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart';
@@ -9,6 +10,7 @@ class StandaloneTranslationService {
   final SpeechToText _stt = SpeechToText();
   final FlutterTts _tts = FlutterTts();
   bool _sttInitialized = false;
+  bool _sttAvailable = false;
 
   // STT locale mapping
   static const Map<String, String> sttLocales = {
@@ -52,15 +54,29 @@ class StandaloneTranslationService {
     'zh': 'zh-CN',
   };
 
-  /// Initialize STT engine
+  /// Initialize STT engine. Returns true if available.
+  /// Can be called multiple times safely — retries if previous init failed.
   Future<bool> initStt() async {
-    if (_sttInitialized) return true;
-    _sttInitialized = await _stt.initialize(
-      onError: (error) {
-        // Handle error silently
-      },
-    );
-    return _sttInitialized;
+    if (_sttInitialized && _sttAvailable) return true;
+
+    try {
+      _sttAvailable = await _stt.initialize(
+        onError: (error) {
+          debugPrint('STT error: ${error.errorMsg}');
+        },
+        onStatus: (status) {
+          debugPrint('STT status: $status');
+        },
+      );
+      _sttInitialized = true;
+      debugPrint('STT initialized: available=$_sttAvailable');
+    } catch (e) {
+      debugPrint('STT init exception: $e');
+      _sttAvailable = false;
+      _sttInitialized = false;
+    }
+
+    return _sttAvailable;
   }
 
   /// Initialize TTS engine with default settings
@@ -68,42 +84,73 @@ class StandaloneTranslationService {
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
+    // Ensure TTS engine is ready on Android
+    if (!kIsWeb) {
+      await _tts.awaitSpeakCompletion(true);
+    }
   }
 
-  /// Start listening for speech input
+  /// Start listening for speech input.
+  /// Throws if STT is not available.
   Future<void> startListening({
     required String languageCode,
     required Function(String text, bool isFinal) onResult,
     required Function(String error) onError,
+    Function(String status)? onStatus,
   }) async {
+    // Always try to init (retries if failed before)
     final available = await initStt();
     if (!available) {
-      onError('Speech recognition is not available on this device.');
+      onError('Speech recognition is not available. Please check that Google Speech Services is installed on your device.');
       return;
+    }
+
+    // Stop any existing listening session
+    if (_stt.isListening) {
+      await _stt.stop();
+      await Future.delayed(const Duration(milliseconds: 200));
     }
 
     final locale = sttLocales[languageCode] ?? 'en_US';
 
-    await _stt.listen(
-      onResult: (result) {
-        onResult(result.recognizedWords, result.finalResult);
-      },
-      localeId: locale,
-      listenMode: ListenMode.dictation,
-      cancelOnError: true,
-      partialResults: true,
-    );
+    try {
+      await _stt.listen(
+        onResult: (result) {
+          final text = result.recognizedWords;
+          final isFinal = result.finalResult;
+          debugPrint('STT result: "$text" (final=$isFinal, confidence=${result.confidence})');
+          onResult(text, isFinal);
+        },
+        localeId: locale,
+        listenMode: ListenMode.dictation,
+        cancelOnError: false,  // Don't cancel on temporary errors
+        partialResults: true,
+        listenFor: const Duration(seconds: 30),  // Max listen time
+        pauseFor: const Duration(seconds: 3),    // Auto-stop after 3s silence
+      );
+      debugPrint('STT listening started with locale: $locale');
+    } catch (e) {
+      debugPrint('STT listen error: $e');
+      onError('Could not start speech recognition: ${e.toString()}');
+    }
   }
 
   /// Stop listening
   Future<void> stopListening() async {
-    await _stt.stop();
+    try {
+      if (_stt.isListening) {
+        await _stt.stop();
+      }
+    } catch (e) {
+      debugPrint('STT stop error: $e');
+    }
   }
 
   /// Check if currently listening
   bool get isListening => _stt.isListening;
 
-  /// Translate text using Google Translate mobile API (free, no API key)
+  /// Translate text using Google Translate API (free, no API key needed)
+  /// Uses the same endpoint as Google Translate app/extension (client=gtx)
   Future<String> translate({
     required String text,
     required String sourceLanguage,
@@ -112,53 +159,67 @@ class StandaloneTranslationService {
     if (text.trim().isEmpty) return '';
     if (sourceLanguage == targetLanguage) return text;
 
-    try {
-      final url = Uri.parse('https://translate.google.com/m').replace(
-        queryParameters: {
-          'sl': sourceLanguage,
-          'tl': targetLanguage,
-          'q': text,
-        },
-      );
+    // Try multiple endpoints for reliability
+    final endpoints = [
+      'https://translate.googleapis.com/translate_a/single',
+      'https://translate.google.com/translate_a/single',
+    ];
 
-      final response = await http.get(
-        url,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-A102U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        },
-      ).timeout(const Duration(seconds: 10));
+    Exception? lastError;
 
-      if (response.statusCode == 200) {
-        // Parse the translated text from the HTML response
-        final body = response.body;
-        final regex = RegExp(r'class="result-container">(.*?)</div>', dotAll: true);
-        final match = regex.firstMatch(body);
-        if (match != null) {
-          String translated = match.group(1) ?? '';
-          // Decode HTML entities
-          translated = _decodeHtmlEntities(translated);
-          return translated.trim();
+    for (final endpoint in endpoints) {
+      try {
+        final url = Uri.parse(endpoint).replace(
+          queryParameters: {
+            'client': 'gtx',
+            'sl': sourceLanguage,
+            'tl': targetLanguage,
+            'dt': 't',
+            'q': text,
+          },
+        );
+
+        final response = await http.get(
+          url,
+          headers: {
+            'User-Agent': 'GoogleTranslate/6.28.0',
+          },
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          // Response is a JSON array: [[[translated_text, source_text, ...]]]
+          final decoded = jsonDecode(response.body);
+          if (decoded is List && decoded.isNotEmpty && decoded[0] is List) {
+            final StringBuffer translated = StringBuffer();
+            for (final segment in decoded[0]) {
+              if (segment is List && segment.isNotEmpty && segment[0] is String) {
+                translated.write(segment[0]);
+              }
+            }
+            final result = translated.toString().trim();
+            if (result.isNotEmpty) {
+              debugPrint('Translation: "$text" → "$result"');
+              return result;
+            }
+          }
+          throw Exception('Could not parse translation response');
+        } else if (response.statusCode == 403 || response.statusCode == 429) {
+          lastError = Exception('Translation service temporarily unavailable. Trying fallback...');
+          continue;
+        } else {
+          lastError = Exception('Translation failed (HTTP ${response.statusCode})');
+          continue;
         }
-
-        // Fallback: try alternative pattern
-        final altRegex = RegExp(r'class="t0">(.*?)</div>', dotAll: true);
-        final altMatch = altRegex.firstMatch(body);
-        if (altMatch != null) {
-          String translated = altMatch.group(1) ?? '';
-          translated = _decodeHtmlEntities(translated);
-          return translated.trim();
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+        if (e.toString().contains('TimeoutException')) {
+          lastError = Exception('Translation timed out. Check your internet connection.');
         }
-
-        throw Exception('Could not parse translation response');
-      } else {
-        throw Exception('Translation request failed (HTTP ${response.statusCode})');
+        continue;
       }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Translation timed out. Check your internet connection.');
-      }
-      rethrow;
     }
+
+    throw lastError ?? Exception('Translation failed. Please try again.');
   }
 
   /// Speak translated text using device TTS
@@ -170,6 +231,7 @@ class StandaloneTranslationService {
 
     final ttsLang = ttsLanguages[languageCode] ?? 'en-US';
     await _tts.setLanguage(ttsLang);
+    debugPrint('TTS speaking in $ttsLang: "$text"');
     await _tts.speak(text);
   }
 
@@ -181,20 +243,6 @@ class StandaloneTranslationService {
   /// Set a completion handler for when TTS finishes speaking
   void setTtsCompletionHandler(Function() onComplete) {
     _tts.setCompletionHandler(onComplete);
-  }
-
-  /// Decode common HTML entities
-  String _decodeHtmlEntities(String text) {
-    return text
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&apos;', "'")
-        .replaceAll('<br>', '\n')
-        .replaceAll('<br/>', '\n')
-        .replaceAll(RegExp(r'<[^>]*>'), ''); // Strip any remaining HTML tags
   }
 
   /// Dispose resources

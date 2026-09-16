@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_provider.dart';
 import 'conversation_provider.dart';
@@ -7,31 +8,39 @@ import 'translation_state.dart';
 class TranslationNotifier extends StateNotifier<TranslationState> {
   final Ref _ref;
   String _recognizedText = '';
-  bool _isFinalResult = false;
+  bool _isProcessing = false;  // Guard against double-processing
 
   TranslationNotifier(this._ref) : super(const TranslationInitial());
 
   /// Start listening for speech
   Future<void> startListening() async {
+    if (_isProcessing) return;  // Don't start if already processing
+
     final service = _ref.read(translationServiceProvider);
     final direction = _ref.read(activeDirectionProvider);
 
     _recognizedText = '';
-    _isFinalResult = false;
-    state = const TranslationRecording();
+    _isProcessing = false;
 
     try {
+      // Initialize engines first
       await service.initStt();
       await service.initTts();
+
+      // Only set recording state AFTER successful init
+      state = const TranslationRecording();
 
       await service.startListening(
         languageCode: direction.source.code,
         onResult: (text, isFinal) {
+          if (_isProcessing) return;  // Ignore results after processing started
+
           _recognizedText = text;
-          _isFinalResult = isFinal;
 
           // Update state to show live recognized text
-          state = TranslationRecording(liveText: text);
+          if (state is TranslationRecording) {
+            state = TranslationRecording(liveText: text);
+          }
 
           // If final result, automatically proceed to translation
           if (isFinal && text.trim().isNotEmpty) {
@@ -39,7 +48,15 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
           }
         },
         onError: (error) {
-          state = TranslationError('Speech recognition error: $error');
+          if (!_isProcessing) {
+            // If we have some text, try to translate it despite the error
+            if (_recognizedText.trim().isNotEmpty) {
+              debugPrint('STT error but have text, processing: "$_recognizedText"');
+              _processTranslation();
+            } else {
+              state = TranslationError('Speech recognition error: $error');
+            }
+          }
         },
       );
     } catch (e) {
@@ -49,34 +66,49 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
 
   /// Stop listening and process whatever we have
   Future<void> stopListening() async {
+    if (_isProcessing) return;  // Already processing, don't interfere
+
     final service = _ref.read(translationServiceProvider);
     await service.stopListening();
 
-    // If we already got a final result, translation is already processing
-    if (_isFinalResult) return;
+    // Small delay to let any final result callback fire
+    await Future.delayed(const Duration(milliseconds: 300));
 
-    // If we have partial text, process it
+    // If already processing (final result callback already fired), skip
+    if (_isProcessing) return;
+
+    // If we have text, process it
     if (_recognizedText.trim().isNotEmpty) {
       await _processTranslation();
     } else {
-      state = const TranslationError('No speech detected. Please try again.');
+      state = const TranslationError('No speech detected. Please speak clearly and try again.');
     }
   }
 
   /// Core pipeline: translate recognized text → speak translation
   Future<void> _processTranslation() async {
+    // Guard: prevent double-processing
+    if (_isProcessing) return;
+    _isProcessing = true;
+
     final service = _ref.read(translationServiceProvider);
     final direction = _ref.read(activeDirectionProvider);
     final sourceText = _recognizedText.trim();
 
     if (sourceText.isEmpty) {
+      _isProcessing = false;
       state = const TranslationError('No speech detected. Please try again.');
       return;
     }
 
+    // Make sure STT is stopped
+    await service.stopListening();
+
     try {
       // Step 1: Translate
       state = const TranslationTranslating();
+      debugPrint('Translating: "$sourceText" (${direction.source.code} → ${direction.target.code})');
+
       final translatedText = await service.translate(
         text: sourceText,
         sourceLanguage: direction.source.code,
@@ -84,9 +116,12 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
       );
 
       if (translatedText.isEmpty) {
+        _isProcessing = false;
         state = const TranslationError('Translation returned empty. Please try again.');
         return;
       }
+
+      debugPrint('Translated: "$translatedText"');
 
       // Step 2: Speak the translation
       state = const TranslationPlayingAudio();
@@ -103,10 +138,16 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
       );
 
       // Wait for TTS to finish (with timeout)
-      await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {},
-      );
+      try {
+        await completer.future.timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            debugPrint('TTS timeout, proceeding');
+          },
+        );
+      } catch (_) {
+        // TTS completion timeout, proceed anyway
+      }
 
       // Step 3: Save to conversation history
       final currentSpeaker = _ref.read(activeSpeakerProvider);
@@ -133,6 +174,8 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
         errorMsg = 'Translation timed out. Check your internet connection.';
       }
       state = TranslationError(errorMsg);
+    } finally {
+      _isProcessing = false;
     }
   }
 
@@ -147,6 +190,7 @@ class TranslationNotifier extends StateNotifier<TranslationState> {
     service.stopListening();
     service.stopSpeaking();
     _recognizedText = '';
+    _isProcessing = false;
     state = const TranslationInitial();
   }
 }
